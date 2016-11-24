@@ -15,9 +15,13 @@ trait RedisClientTemplate {
 
   def close
 
+  def setString(key: String, value: String, expireSeconds: Int): Boolean
+
   def set(key: String, value: AnyRef, expireSeconds: Int): Boolean
 
   def get[T](key: String, c: Class[T]): T
+
+  def getString(key: String): String
 
   def delete(key: String): Boolean
 }
@@ -66,11 +70,15 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   override def close: Unit = shardedJedisPool.close()
 
   override def set(key: String, value: AnyRef, expireSeconds: Int): Boolean = {
+    setString(key, JsonHelper.writeValueAsString(value), expireSeconds)
+  }
+
+  override def setString(key: String, value: String, expireSeconds: Int): Boolean = {
     var shardedJedis: ShardedJedis = null
     try {
       assert(expireSeconds > 0, "expect expireSeconds > 0")
       val keyBytes: Array[Byte] = key.getBytes(CHARSET)
-      val valueBytes: Array[Byte] = JsonHelper.writeValueAsString(value).getBytes(CHARSET)
+      val valueBytes: Array[Byte] = value.getBytes(CHARSET)
       assert(keyBytes.length < MAX_KEY_BYTES, "expect keyBytes < " + MAX_KEY_BYTES)
       assert(valueBytes.length < MAX_VALUE_BYTES, "expect valueBytes < " + MAX_VALUE_BYTES)
       shardedJedis = getShardedJedis
@@ -85,13 +93,17 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   }
 
   override def get[T](key: String, c: Class[T]): T = {
+    JsonHelper.read[T](getString(key), c)
+  }
+
+  override def getString(key: String): String = {
     var shardedJedis: ShardedJedis = null
     try {
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       val response: Response[Array[Byte]] = pipel.get(key.getBytes(CHARSET))
       pipel.sync()
-      JsonHelper.read[T](new String(response.get(), CHARSET), c)
+      new String(response.get(), CHARSET)
     } finally {
       if (shardedJedis != null) shardedJedis.close()
     }
