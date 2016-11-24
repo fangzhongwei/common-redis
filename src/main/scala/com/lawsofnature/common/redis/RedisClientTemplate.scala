@@ -8,38 +8,91 @@ import redis.clients.jedis._
 /**
   * Created by fangzhongwei on 2016/11/23.
   */
-class RedisClientTemplate @Inject()(@Named("redis.host") host:String,
-                                    @Named("redis.port") port:Int) {
 
+trait RedisClientTemplate {
+  def init
+
+  def close
+
+  def set(key: String, value: String, expireSeconds: Int): Boolean
+
+  def get(key: String): String
 }
 
-object Test extends App{
-  private val info: JedisShardInfo = new JedisShardInfo("192.168.181.131")
-  info.setConnectionTimeout(10000)
-  private val shards: util.List[JedisShardInfo] = util.Arrays.asList(
-    info)
+class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
+                                        @Named("redis.shard.connection.timeout") shardConnectionTimeout: Int,
+                                        @Named("redis.min.idle") minIdle: Int,
+                                        @Named("redis.max.idle") maxIdle: Int,
+                                        @Named("redis.max.total") maxTotal: Int,
+                                        @Named("redis.max.wait.millis") maxWaitMillis: Int,
+                                        @Named("redis.test.on.borrow") testOnBorrow: Boolean) extends RedisClientTemplate {
+  val SUCCESS_TAG = "OK"
+  var shardedJedisPool: ShardedJedisPool = _
 
-  private val config: JedisPoolConfig = new JedisPoolConfig()
-  config.setMaxIdle(100)
-  config.setMaxWaitMillis(100000)
-  config.setTestOnBorrow(true)
-  config.setMaxTotal(100)
-  config.setMinIdle(1)
+  def apply(cluster: String, shardConnectionTimeout: Int, minIdle: Int, maxIdle: Int, maxTotal: Int, maxWaitMillis: Int, testOnBorrow: Boolean): RedisClientTemplateImpl = new RedisClientTemplateImpl(cluster, shardConnectionTimeout, minIdle, maxIdle, maxTotal, maxWaitMillis, testOnBorrow)
 
-  var pool: ShardedJedisPool  = new ShardedJedisPool(config, shards)
-
-  var one: ShardedJedis  = pool.getResource()
-
-  var pipeline: ShardedJedisPipeline  = one.pipelined()
-
-  var start: Long  = System.currentTimeMillis()
-  for (i <- 1 to 100000) {
-    pipeline.set("sp" + i, "n" + i)
+  override def init = {
+    val config: JedisPoolConfig = getPoolConfig
+    val shards: util.List[JedisShardInfo] = getShards
+    shardedJedisPool = new ShardedJedisPool(config, shards)
   }
-  private val results: util.List[AnyRef] = pipeline.syncAndReturnAll()
-  var end:Long  = System.currentTimeMillis()
-  pool.returnResource(one)
-  System.out.println("Pipelined@Pool SET: " + ((end - start)/1000.0) + " seconds")
-  pool.destroy()
 
+  def getPoolConfig: JedisPoolConfig = {
+    val config: JedisPoolConfig = new JedisPoolConfig()
+    config.setMinIdle(minIdle)
+    config.setMaxIdle(maxIdle)
+    config.setMaxTotal(maxTotal)
+    config.setMaxWaitMillis(maxWaitMillis)
+    config.setTestOnBorrow(testOnBorrow)
+    config
+  }
+
+  def getShards: util.List[JedisShardInfo] = {
+    val shards: util.List[JedisShardInfo] = new util.ArrayList[JedisShardInfo]()
+    var jedisShardInfo: JedisShardInfo = null
+    cluster.split(",").foreach(s => {
+      val hostAndPortArray: Array[String] = s.split(":")
+      jedisShardInfo = new JedisShardInfo(hostAndPortArray(0), hostAndPortArray(1))
+      jedisShardInfo.setConnectionTimeout(10000)
+      shards.add(jedisShardInfo)
+    })
+    shards
+  }
+
+  def getShardedJedis: ShardedJedis = shardedJedisPool.getResource()
+
+  override def close: Unit = shardedJedisPool.close()
+
+  override def set(key: String, value: String, expireSeconds: Int): Boolean = {
+    var shardedJedis: ShardedJedis = null
+    try {
+      shardedJedis = getShardedJedis
+      val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
+      val response: Response[String] = pipel.set(key, value)
+      pipel.sync()
+      SUCCESS_TAG.equals(response.get())
+    } finally {
+      if (shardedJedis != null) shardedJedis.close()
+    }
+  }
+
+  override def get(key: String): String = {
+    var shardedJedis: ShardedJedis = null
+    try {
+      shardedJedis = getShardedJedis
+      val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
+      val response: Response[String] = pipel.get(key)
+      pipel.sync()
+      response.get()
+    } finally {
+      if (shardedJedis != null) shardedJedis.close()
+    }
+  }
+}
+
+object Test extends App {
+  val redisClientTemplate: RedisClientTemplate = new RedisClientTemplateImpl("192.168.181.133:6379", 20000, 5, 10, 100, 10000, true)
+  redisClientTemplate.init
+  println(redisClientTemplate.set("k122", "v5", 100))
+  println(redisClientTemplate.get("k122"))
 }
