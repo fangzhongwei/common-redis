@@ -1,5 +1,6 @@
 package com.lawsofnature.common.redis
 
+import java.lang.Long
 import java.util
 import javax.inject.{Inject, Named}
 
@@ -16,6 +17,8 @@ trait RedisClientTemplate {
   def set(key: String, value: String, expireSeconds: Int): Boolean
 
   def get(key: String): String
+
+  def delete(key: String): Boolean
 }
 
 class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
@@ -79,6 +82,19 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
       val response: Response[String] = pipel.get(key)
       pipel.sync()
       response.get()
+    } finally {
+      if (shardedJedis != null) shardedJedis.close()
+    }
+  }
+
+  override def delete(key: String): Boolean = {
+    var shardedJedis: ShardedJedis = null
+    try {
+      shardedJedis = getShardedJedis
+      val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
+      val response: Response[Long] = pipel.del(key)
+      pipel.sync()
+      response.get() == 1
     } finally {
       if (shardedJedis != null) shardedJedis.close()
     }
