@@ -114,7 +114,7 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
     try {
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
-      val response: Response[Long] = pipel.del(key)
+      val response: Response[Long] = pipel.del(key.getBytes(CHARSET))
       pipel.sync()
       response.get() == 1
     } finally {
