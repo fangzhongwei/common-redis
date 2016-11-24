@@ -17,7 +17,7 @@ trait RedisClientTemplate {
 
   def set(key: String, value: AnyRef, expireSeconds: Int): Boolean
 
-  def get[T](key: String): T
+  def get[T](key: String, c: Class[T]): T
 
   def delete(key: String): Boolean
 }
@@ -84,14 +84,14 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
     }
   }
 
-  override def get[T](key: String): T = {
+  override def get[T](key: String, c: Class[T]): T = {
     var shardedJedis: ShardedJedis = null
     try {
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       val response: Response[Array[Byte]] = pipel.get(key.getBytes(CHARSET))
       pipel.sync()
-      JsonHelper.read[T](new String(response.get(), CHARSET), classOf[T])
+      JsonHelper.read[T](new String(response.get(), CHARSET), c)
     } finally {
       if (shardedJedis != null) shardedJedis.close()
     }
