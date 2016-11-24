@@ -52,11 +52,7 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
     shards
   }
 
-  override def init = {
-    val config: JedisPoolConfig = getPoolConfig
-    val shards: util.List[JedisShardInfo] = getShards
-    shardedJedisPool = new ShardedJedisPool(config, shards)
-  }
+  override def init = shardedJedisPool = new ShardedJedisPool(getPoolConfig, getShards)
 
   def getShardedJedis: ShardedJedis = shardedJedisPool.getResource()
 
