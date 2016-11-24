@@ -8,7 +8,6 @@ import redis.clients.jedis._
 /**
   * Created by fangzhongwei on 2016/11/23.
   */
-
 trait RedisClientTemplate {
   def init
 
@@ -31,12 +30,6 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
 
   def apply(cluster: String, shardConnectionTimeout: Int, minIdle: Int, maxIdle: Int, maxTotal: Int, maxWaitMillis: Int, testOnBorrow: Boolean): RedisClientTemplateImpl = new RedisClientTemplateImpl(cluster, shardConnectionTimeout, minIdle, maxIdle, maxTotal, maxWaitMillis, testOnBorrow)
 
-  override def init = {
-    val config: JedisPoolConfig = getPoolConfig
-    val shards: util.List[JedisShardInfo] = getShards
-    shardedJedisPool = new ShardedJedisPool(config, shards)
-  }
-
   def getPoolConfig: JedisPoolConfig = {
     val config: JedisPoolConfig = new JedisPoolConfig()
     config.setMinIdle(minIdle)
@@ -57,6 +50,12 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
       shards.add(jedisShardInfo)
     })
     shards
+  }
+
+  override def init = {
+    val config: JedisPoolConfig = getPoolConfig
+    val shards: util.List[JedisShardInfo] = getShards
+    shardedJedisPool = new ShardedJedisPool(config, shards)
   }
 
   def getShardedJedis: ShardedJedis = shardedJedisPool.getResource()
@@ -88,11 +87,4 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
       if (shardedJedis != null) shardedJedis.close()
     }
   }
-}
-
-object Test extends App {
-  val redisClientTemplate: RedisClientTemplate = new RedisClientTemplateImpl("192.168.181.133:6379", 20000, 5, 10, 100, 10000, true)
-  redisClientTemplate.init
-  println(redisClientTemplate.set("k122", "v5", 100))
-  println(redisClientTemplate.get("k122"))
 }
