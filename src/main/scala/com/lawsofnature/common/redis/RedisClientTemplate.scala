@@ -5,9 +5,10 @@ import java.util
 import javax.inject.{Inject, Named}
 
 import com.lawsofnature.common.helper.JsonHelper
+import org.slf4j.LoggerFactory
 import redis.clients.jedis._
-import scala.concurrent.ExecutionContext.Implicits.global
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise}
 
 /**
@@ -36,6 +37,8 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
                                         @Named("redis.max.total") maxTotal: Int,
                                         @Named("redis.max.wait.millis") maxWaitMillis: Int,
                                         @Named("redis.test.on.borrow") testOnBorrow: Boolean) extends RedisClientTemplate {
+  val logger = LoggerFactory.getLogger(this.getClass)
+
   val SUCCESS_TAG = "OK"
   val CHARSET = "UTF-8"
   val MAX_KEY_BYTES = 1024 * 10
@@ -76,8 +79,8 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
 
   override def setString(key: String, value: String, expireSeconds: Int): Future[Option[Boolean]] = {
     var shardedJedis: ShardedJedis = null
+    val promise: Promise[Option[Boolean]] = Promise[Option[Boolean]]()
     try {
-      val promise: Promise[Option[Boolean]] = Promise[Option[Boolean]]()
       Future {
         assert(expireSeconds > 0, "expect expireSeconds > 0")
         val keyBytes: Array[Byte] = key.getBytes(CHARSET)
@@ -91,10 +94,12 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
         pipel.sync()
         promise.success(Some(SUCCESS_TAG.equals(response.get())))
       }
-      promise.future
+    } catch {
+      case ex: Exception => promise.failure(ex)
     } finally {
       if (shardedJedis != null) shardedJedis.close()
     }
+    promise.future
   }
 
   override def get[T](key: String, c: Class[T]): Future[Option[T]] = {
@@ -138,8 +143,8 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
 
   override def delete(key: String): Future[Option[Boolean]] = {
     var shardedJedis: ShardedJedis = null
+    val promise: Promise[Option[Boolean]] = Promise[Option[Boolean]]()
     try {
-      val promise: Promise[Option[Boolean]] = Promise[Option[Boolean]]()
       Future {
         shardedJedis = getShardedJedis
         val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
@@ -147,9 +152,11 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
         pipel.sync()
         promise.success(Some(response.get() == 1))
       }
-      promise.future
+    } catch {
+      case ex: Exception => promise.failure(ex)
     } finally {
       if (shardedJedis != null) shardedJedis.close()
     }
+    promise.future
   }
 }
