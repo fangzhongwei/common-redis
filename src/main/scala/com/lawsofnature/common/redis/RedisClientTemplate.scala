@@ -6,6 +6,7 @@ import javax.inject.{Inject, Named}
 
 import com.lawsofnature.common.helper.JsonHelper
 import redis.clients.jedis._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.{Future, Promise}
 
