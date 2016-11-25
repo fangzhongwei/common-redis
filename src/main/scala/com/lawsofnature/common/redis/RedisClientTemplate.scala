@@ -57,7 +57,7 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
     cluster.split(",").foreach(s => {
       val hostAndPortArray: Array[String] = s.split(":")
       jedisShardInfo = new JedisShardInfo(hostAndPortArray(0), hostAndPortArray(1))
-      jedisShardInfo.setConnectionTimeout(10000)
+      jedisShardInfo.setConnectionTimeout(shardConnectionTimeout)
       shards.add(jedisShardInfo)
     })
     shards
