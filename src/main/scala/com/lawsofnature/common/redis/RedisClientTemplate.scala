@@ -85,7 +85,7 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       val response: Response[String] = pipel.set(keyBytes, valueBytes)
-      pipel.expire(keyBytes, expireSeconds)
+      if (expireSeconds > 0) pipel.expire(keyBytes, expireSeconds)
       pipel.sync()
       true
     } catch {
