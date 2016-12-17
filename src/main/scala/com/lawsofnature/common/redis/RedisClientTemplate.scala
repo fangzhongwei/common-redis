@@ -1,6 +1,7 @@
 package com.lawsofnature.common.redis
 
 import java.lang.Long
+import java.nio.charset.StandardCharsets
 import java.util
 import javax.inject.{Inject, Named}
 
@@ -20,11 +21,17 @@ trait RedisClientTemplate {
 
   def set(key: String, value: AnyRef, expireSeconds: Int): Boolean
 
+  def setBytes(keyBytes: Array[Byte], valueBytes: Array[Byte], expireSeconds: Int): Boolean
+
   def get[T](key: String, c: Class[T]): Option[T]
 
   def getString(key: String): Option[String]
 
+  def getBytes(keyBytes: Array[Byte]): Option[Array[Byte]]
+
   def delete(key: String): Boolean
+
+  def deleteBytes(keyBytes: Array[Byte]): Boolean
 }
 
 class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
@@ -75,11 +82,13 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   override def set(key: String, value: AnyRef, expireSeconds: Int): Boolean = setString(key, JsonHelper.writeValueAsString(value), expireSeconds)
 
   override def setString(key: String, value: String, expireSeconds: Int): Boolean = {
+    setBytes(key.getBytes(StandardCharsets.UTF_8), value.getBytes(StandardCharsets.UTF_8), expireSeconds)
+  }
+
+  override def setBytes(keyBytes: Array[Byte], valueBytes: Array[Byte], expireSeconds: Int): Boolean = {
     var shardedJedis: ShardedJedis = null
     try {
       assert(expireSeconds > 0, "expect expireSeconds > 0")
-      val keyBytes: Array[Byte] = key.getBytes(CHARSET)
-      val valueBytes: Array[Byte] = value.getBytes(CHARSET)
       assert(keyBytes.length < MAX_KEY_BYTES, "expect keyBytes < " + MAX_KEY_BYTES)
       assert(valueBytes.length < MAX_VALUE_BYTES, "expect valueBytes < " + MAX_VALUE_BYTES)
       shardedJedis = getShardedJedis
@@ -112,25 +121,36 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   }
 
   def getStringFromCache(key: String): Option[String] = {
+    getBytes(key.getBytes(StandardCharsets.UTF_8)) match {
+      case Some(array) => Some(new String(array, StandardCharsets.UTF_8))
+      case None => None
+    }
+  }
+
+  override def getBytes(keyBytes: Array[Byte]): Option[Array[Byte]] = {
     var shardedJedis: ShardedJedis = null
     try {
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
-      val response: Response[Array[Byte]] = pipel.get(key.getBytes(CHARSET))
+      val response: Response[Array[Byte]] = pipel.get(keyBytes)
       pipel.sync()
       val bytes: Array[Byte] = response.get()
-      if (bytes == null || bytes.length == 0) None else Some(new String(bytes, CHARSET))
+      if (bytes == null || bytes.length == 0) None else Some(bytes)
     } finally {
       if (shardedJedis != null) shardedJedis.close()
     }
   }
 
   override def delete(key: String): Boolean = {
+    deleteBytes(key.getBytes(StandardCharsets.UTF_8))
+  }
+
+  override def deleteBytes(keyBytes: Array[Byte]): Boolean = {
     var shardedJedis: ShardedJedis = null
     try {
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
-      val response: Response[Long] = pipel.del(key.getBytes(CHARSET))
+      val response: Response[Long] = pipel.del(keyBytes)
       pipel.sync()
       response.get() == 1
     } catch {
