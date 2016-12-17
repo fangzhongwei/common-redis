@@ -44,7 +44,6 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   val logger = LoggerFactory.getLogger(this.getClass)
 
   val SUCCESS_TAG = "OK"
-  val CHARSET = "UTF-8"
   val MAX_KEY_BYTES = 1024 * 10
   val MAX_VALUE_BYTES = 1024 * 50
   var shardedJedisPool: ShardedJedisPool = _
