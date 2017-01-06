@@ -19,11 +19,7 @@ trait RedisClientTemplate {
 
   def setString(key: String, value: String, expireSeconds: Int): Boolean
 
-  def set(key: String, value: AnyRef, expireSeconds: Int): Boolean
-
   def setBytes(keyBytes: Array[Byte], valueBytes: Array[Byte], expireSeconds: Int): Boolean
-
-  def get[T](key: String, c: Class[T]): Option[T]
 
   def getString(key: String): Option[String]
 
@@ -78,8 +74,6 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
 
   override def close: Unit = shardedJedisPool.close()
 
-  override def set(key: String, value: AnyRef, expireSeconds: Int): Boolean = setString(key, JsonHelper.writeValueAsString(value), expireSeconds)
-
   override def setString(key: String, value: String, expireSeconds: Int): Boolean = {
     setBytes(key.getBytes(StandardCharsets.UTF_8), value.getBytes(StandardCharsets.UTF_8), expireSeconds)
   }
@@ -102,13 +96,6 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
         false
     } finally {
       if (shardedJedis != null) shardedJedis.close()
-    }
-  }
-
-  override def get[T](key: String, c: Class[T]): Option[T] = {
-    getStringFromCache(key) match {
-      case Some(str) => Some(JsonHelper.readByType[T](str, c))
-      case None => None
     }
   }
 
