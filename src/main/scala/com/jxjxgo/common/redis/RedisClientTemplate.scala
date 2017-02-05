@@ -1,11 +1,10 @@
-package com.lawsofnature.common.redis
+package com.jxjxgo.common.redis
 
 import java.lang.Long
 import java.nio.charset.StandardCharsets
 import java.util
 import javax.inject.{Inject, Named}
 
-import com.lawsofnature.common.helper.JsonHelper
 import org.slf4j.LoggerFactory
 import redis.clients.jedis._
 
@@ -16,6 +15,8 @@ trait RedisClientTemplate {
   def init
 
   def close
+
+  def zadd(key: Array[Byte], index: Double, bytes: Array[Byte])
 
   def setString(key: String, value: String, expireSeconds: Int): Boolean
 
@@ -137,6 +138,23 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       val response: Response[Long] = pipel.del(keyBytes)
+      pipel.sync()
+      response.get() == 1
+    } catch {
+      case ex: Exception =>
+        logger.error("cache", ex)
+        false
+    } finally {
+      if (shardedJedis != null) shardedJedis.close()
+    }
+  }
+
+  override def zadd(key: Array[Byte], index: Double, member: Array[Byte]): Unit = {
+    var shardedJedis: ShardedJedis = null
+    try {
+      shardedJedis = getShardedJedis
+      val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
+      val response: Response[Long] = pipel.zadd(key, index, member)
       pipel.sync()
       response.get() == 1
     } catch {
