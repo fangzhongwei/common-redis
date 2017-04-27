@@ -165,4 +165,6 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
       if (shardedJedis != null) shardedJedis.close()
     }
   }
+
+  init
 }
