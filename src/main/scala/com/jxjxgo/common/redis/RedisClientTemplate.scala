@@ -29,6 +29,10 @@ trait RedisClientTemplate {
   def delete(key: String): Boolean
 
   def deleteBytes(keyBytes: Array[Byte]): Boolean
+
+  def expire(keyBytes: Array[Byte], expireSeconds: Int): Boolean
+
+  def expire(key:String, expireSeconds: Int): Boolean
 }
 
 class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
@@ -88,6 +92,25 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       val response: Response[String] = pipel.set(keyBytes, valueBytes)
+      if (expireSeconds > 0) pipel.expire(keyBytes, expireSeconds)
+      pipel.sync()
+      true
+    } catch {
+      case ex: Exception =>
+        logger.error("cache", ex)
+        false
+    } finally {
+      if (shardedJedis != null) shardedJedis.close()
+    }
+  }
+
+  override def expire(keyBytes: Array[Byte], expireSeconds: Int): Boolean = {
+    var shardedJedis: ShardedJedis = null
+    try {
+      assert(expireSeconds > 0, "expect expireSeconds > 0")
+      assert(keyBytes.length < MAX_KEY_BYTES, "expect keyBytes < " + MAX_KEY_BYTES)
+      shardedJedis = getShardedJedis
+      val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       if (expireSeconds > 0) pipel.expire(keyBytes, expireSeconds)
       pipel.sync()
       true
@@ -164,6 +187,10 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
     } finally {
       if (shardedJedis != null) shardedJedis.close()
     }
+  }
+
+  override def expire(key: String, expireSeconds: Int): Boolean = {
+    expire(key.getBytes(StandardCharsets.UTF_8), expireSeconds)
   }
 
   init
