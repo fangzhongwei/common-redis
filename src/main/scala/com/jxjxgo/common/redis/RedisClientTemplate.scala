@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets
 import java.util
 import javax.inject.{Inject, Named}
 
+import com.jxjxgo.common.exception.{Asserts, ErrorCode}
 import org.slf4j.LoggerFactory
 import redis.clients.jedis._
 
@@ -45,8 +46,8 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   val logger = LoggerFactory.getLogger(this.getClass)
 
   val SUCCESS_TAG = "OK"
-  val MAX_KEY_BYTES = 1024 * 10
-  val MAX_VALUE_BYTES = 1024 * 50
+  val MAX_KEY_BYTES = 1024 * 100
+  val MAX_VALUE_BYTES = 1024 * 1024
   var shardedJedisPool: ShardedJedisPool = _
 
   def apply(cluster: String, shardConnectionTimeout: Int, minIdle: Int, maxIdle: Int, maxTotal: Int, maxWaitMillis: Int, testOnBorrow: Boolean): RedisClientTemplateImpl = new RedisClientTemplateImpl(cluster, shardConnectionTimeout, minIdle, maxIdle, maxTotal, maxWaitMillis, testOnBorrow)
@@ -86,9 +87,9 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   override def setBytes(keyBytes: Array[Byte], valueBytes: Array[Byte], expireSeconds: Int): Boolean = {
     var shardedJedis: ShardedJedis = null
     try {
-      assert(expireSeconds > 0, "expect expireSeconds > 0")
-      assert(keyBytes.length < MAX_KEY_BYTES, "expect keyBytes < " + MAX_KEY_BYTES)
-      assert(valueBytes.length < MAX_VALUE_BYTES, "expect valueBytes < " + MAX_VALUE_BYTES)
+      Asserts.assertTrue(expireSeconds > 0, ErrorCode.DB_CACHE_EXPIRE_TIME_MUST_BIGGER_THAN_ZERO)
+      Asserts.assertTrue(keyBytes.length < MAX_KEY_BYTES, ErrorCode.DB_CACHE_KEY_TOO_LONG)
+      Asserts.assertTrue(valueBytes.length < MAX_VALUE_BYTES, ErrorCode.DB_CACHE_VALUE_TOO_LONG)
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       val response: Response[String] = pipel.set(keyBytes, valueBytes)
@@ -107,8 +108,8 @@ class RedisClientTemplateImpl @Inject()(@Named("redis.shards") cluster: String,
   override def expire(keyBytes: Array[Byte], expireSeconds: Int): Boolean = {
     var shardedJedis: ShardedJedis = null
     try {
-      assert(expireSeconds > 0, "expect expireSeconds > 0")
-      assert(keyBytes.length < MAX_KEY_BYTES, "expect keyBytes < " + MAX_KEY_BYTES)
+      Asserts.assertTrue(expireSeconds > 0, ErrorCode.DB_CACHE_EXPIRE_TIME_MUST_BIGGER_THAN_ZERO)
+      Asserts.assertTrue(keyBytes.length < MAX_KEY_BYTES, ErrorCode.DB_CACHE_KEY_TOO_LONG)
       shardedJedis = getShardedJedis
       val pipel: ShardedJedisPipeline = shardedJedis.pipelined()
       if (expireSeconds > 0) pipel.expire(keyBytes, expireSeconds)
